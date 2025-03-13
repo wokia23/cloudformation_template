@@ -1,0 +1,349 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  This project is to design a 3-tier application with ec2 instances for the web
+  and application layers, and RDS for the database layers
+  
+Parameters: 
+  VPCName:
+    Type: String
+    Default: "EffulgenceVPC"
+    Description: Name of the VPC
+
+  VPCCIDR:
+    Type: String
+    Default: "10.0.0.0/16"
+    Description: The CIDR block for the VPC.
+
+  PublicSubnet1CIDR:
+    Type: String
+    Default: "10.0.1.0/24"
+    Description: The CIDR block for the first public subnet.
+
+  PublicSubnet2CIDR:
+    Type: String
+    Default: "10.0.2.0/24"
+    Description: The CIDR block for the second public subnet.
+
+  PrivateSubnet1CIDR:
+    Type: String
+    Default: "10.0.3.0/24"
+    Description: The CIDR block for the first private subnet.
+
+  PrivateSubnet2CIDR:
+    Type: String
+    Default: "10.0.4.0/24"
+    Description: The CIDR block for the second private subnet.
+
+  DBInstanceClass:
+    Type: String
+    Default: "db.t2.micro"
+    Description: The database instance type (e.g., db.t2.micro).
+
+  DBName:
+    Type: String
+    Default: "effulgenceDB"
+    Description: The name of the database to create.
+
+  DBUsername:
+    Type: String
+    Description: The database administrator username.
+
+  DBPassword:
+    Type: String
+    NoEcho: true
+    Description: The database administrator password.
+
+  Engine:
+    Type: String
+    Default: "mysql"
+    AllowedValues:
+      - mysql
+      - postgres
+      - sqlserver
+    Description: The database engine to use.
+
+
+Resources:
+  EffulgenceVPC:
+    Type: AWS::EC2::VPC
+    Properties: 
+      CidrBlock: !Ref VPCCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Ref VPCName
+
+  EffulgenceVPCIGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Ref VPCName
+        
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref EffulgenceVPC
+      InternetGatewayId: !Ref EffulgenceVPCIGW
+
+  EffulgencePubSN1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref EffulgenceVPC
+      CidrBlock: !Ref PublicSubnet1CIDR
+      AvailabilityZone: us-east-1a
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Ref VPCName
+  
+  EffulgencePubSN2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref EffulgenceVPC
+      CidrBlock: !Ref PublicSubnet2CIDR
+      AvailabilityZone: us-east-1b
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Ref VPCName
+
+  EffulgencePubSNRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref EffulgenceVPC
+      Tags:
+        - Key: Name
+          Value: !Ref VPCName
+
+  EffulgencePubSN1RTAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: EffulgencePubSN1
+      RouteTableId:
+        Ref: EffulgencePubSNRT
+
+  EffulgencePubSN2RTAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: EffulgencePubSN2
+      RouteTableId:
+        Ref: EffulgencePubSNRT
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties: 
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref EffulgenceVPCIGW
+      RouteTableId: !Ref EffulgencePubSNRT
+
+  EffulgencePriSN1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref EffulgenceVPC
+      CidrBlock: !Ref PrivateSubnet1CIDR
+      AvailabilityZone: us-east-1a
+      Tags:
+        - Key: Name
+          Value: !Ref VPCName
+
+  EffulgencePriSN2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref EffulgenceVPC
+      CidrBlock: !Ref PrivateSubnet2CIDR
+      AvailabilityZone: us-east-1b
+      Tags:
+        - Key: Name
+          Value: !Ref VPCName   
+
+  EffulgencePriSNRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref EffulgenceVPC
+      Tags:
+        - Key: Name
+          Value: !Ref VPCName
+
+  EffulgenceNGW:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NATGatewayEIP.AllocationId
+      SubnetId: !Ref EffulgencePubSN1
+      Tags:
+        - Key: Name
+          Value: !Ref VPCName
+
+  NATGatewayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref EffulgencePriSNRT
+      DestinationCidrBlock: "0.0.0.0/0" 
+      NatGatewayId: !Ref EffulgenceNGW
+
+  EffulgencePriSN1RTAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref EffulgencePriSN1
+      RouteTableId: !Ref EffulgencePriSNRT
+
+  EffulgencePriSN2RTAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref EffulgencePriSN2
+      RouteTableId: !Ref EffulgencePriSNRT
+
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security group for ALB allowing HTTP and HTTPS traffic"
+      VpcId: !Ref EffulgenceVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0  # Allow HTTP from anywhere
+
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0  # Allow HTTPS from anywhere
+
+      SecurityGroupEgress:
+        - IpProtocol: -1  # Allow all outbound traffic
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: ALB-SecurityGroup
+
+  WebServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to client host
+      VpcId: !Ref EffulgenceVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  AppServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for application servers in a private subnet
+      VpcId: !Ref EffulgenceVPC 
+      SecurityGroupIngress:
+        # Allow SSH access from a specific IP or range
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+
+      SecurityGroupEgress:
+        # Allow outbound traffic to the internet if needed (for API calls, updates, etc.)
+        - IpProtocol: -1  # Allow all outbound traffic; adjust based on requirements
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0  # Or restrict to specific IPs/ranges as needed
+
+        # Allow communication with other services in the VPC
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: !GetAtt EffulgenceVPC.CidrBlock  # Allows communication to other resources in the VPC
+
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security group for database server in private subnet"
+      VpcId: !Ref EffulgenceVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306  # MySQL/Aurora (use 5432 for PostgreSQL, 1433 for MSSQL)
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref AppServerSecurityGroup  # Allow only App Servers
+      SecurityGroupEgress:
+        - IpProtocol: -1  # Allow all outbound traffic (modify if needed)
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: Database-SecurityGroup
+
+Outputs: 
+  VPCID:
+    Description: The VPC ID
+    Value: !Ref EffulgenceVPC
+    Export: 
+      Name: !Sub "${AWS::StackName}-VPCID"
+
+  PublicSubnet1ID:
+    Description: The ID of the first public subnet
+    Value: !Ref EffulgencePubSN1
+    Export: 
+      Name: !Sub "${AWS::StackName}-PublicSubnet1ID"
+
+  PublicSubnet2ID:
+    Description: The ID of the second public subnet
+    Value: !Ref EffulgencePubSN2
+    Export: 
+      Name: !Sub "${AWS::StackName}-PublicSubnet2ID"
+
+  PrivateSubnet1ID:
+    Description: The ID of the first private subnet
+    Value: !Ref EffulgencePriSN1
+    Export: 
+      Name: !Sub "${AWS::StackName}-PrivateSubnet1ID"
+
+  PrivateSubnet2ID:
+    Description: The ID of the second private subnet
+    Value: !Ref EffulgencePriSN2
+    Export: 
+      Name: !Sub "${AWS::StackName}-PrivateSubnet2ID"
+
+  WebServerSecurityGroup:
+    Description: The security group ID for the web server
+    Value: !Ref WebServerSecurityGroup
+    Export: 
+      Name: !Sub "${AWS::StackName}-WebServerSecurityGroup"
+
+  AppServerSecurityGroup:
+    Description: The security group ID for the application server
+    Value: !Ref AppServerSecurityGroup
+    Export: 
+      Name: !Sub "${AWS::StackName}-AppServerSecurityGroup"
+
+  DatabaseSecurityGroup:
+    Description: The security group ID for the database server
+    Value: !Ref DatabaseSecurityGroup
+    Export: 
+      Name: !Sub "${AWS::StackName}-DatabaseSecurityGroup"
+
+  ALBSecurityGroup:
+    Description: The security group ID for the Application Load Balancer
+    Value: !Ref ALBSecurityGroup
+    Export: 
+      Name: !Sub "${AWS::StackName}-ALBSecurityGroup" 

@@ -1,0 +1,275 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Effulgence Network CloudFormation Template'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+    Description: 'Deployment environment'
+
+  VpcCidr:
+    Type: String
+    Description: 'CIDR block for the VPC'
+
+  PublicSubnet1Cidr:
+    Type: String
+    Description: 'CIDR block for Public Subnet 1'
+
+  PublicSubnet2Cidr:
+    Type: String
+    Description: 'CIDR block for Public Subnet 2'
+
+  PrivateSubnet1Cidr:
+    Type: String
+    Description: 'CIDR block for Private Subnet 1'
+
+  PrivateSubnet2Cidr:
+    Type: String
+    Description: 'CIDR block for Private Subnet 2'
+
+Mappings:
+  RegionMap:
+    us-east-1:
+      AMI: "ami-12345678"
+    us-west-1:
+      AMI: "ami-87654321"
+
+Conditions:
+  IsProd: !Equals [!Ref Environment, "prod"]
+
+Resources:
+  EffulgenceVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      Tags:
+        - Key: Name
+          Value: !Sub "Effulgence-VPC-${Environment}"
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Department
+          Value: !Sub "${AWS::StackName}-Department"
+
+  EffulgenceInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "Effulgence-IGW-${Environment}"
+
+  EffulgenceVPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref EffulgenceVPC
+      InternetGatewayId: !Ref EffulgenceInternetGateway
+
+  EffulgencePublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref EffulgenceVPC
+      Tags:
+        - Key: Name
+          Value: !Sub "Effulgence-PublicRouteTable-${Environment}"
+
+  EffulgencePrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref EffulgenceVPC
+      Tags:
+        - Key: Name
+          Value: !Sub "Effulgence-PrivateRouteTable-${Environment}"
+          
+  EffulgencePublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref EffulgencePublicRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref EffulgenceInternetGateway
+
+  EffulgencePublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref EffulgenceVPC
+      CidrBlock: !Ref PublicSubnet1Cidr
+      AvailabilityZone: #!Select [0, !GetAZs !Ref "AWS::Region"]
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: !Ref "AWS::Region"
+      Tags:
+        - Key: Name
+          Value: !Sub "Effulgence-PublicSubnet1-${Environment}"
+
+  EffulgencePublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref EffulgenceVPC
+      CidrBlock: !Ref PublicSubnet2Cidr
+      AvailabilityZone: #!Select [1, !GetAZs !Ref "AWS::Region"]
+        Fn::Select: 
+          - 1
+          - Fn::GetAZs: !Ref "AWS::Region"
+      Tags:
+        - Key: Name
+          Value: !Sub "Effulgence-PublicSubnet2-${Environment}"
+
+  EffulgencePublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref EffulgencePublicSubnet1
+      RouteTableId: !Ref EffulgencePublicRouteTable
+
+  EffulgencePublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref EffulgencePublicSubnet2
+      RouteTableId: !Ref EffulgencePublicRouteTable
+
+  EffulgencePrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref EffulgenceVPC
+      CidrBlock: !Ref PrivateSubnet1Cidr
+      AvailabilityZone: #!Select [0, !GetAZs !Ref "AWS::Region"]
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: !Ref "AWS::Region"
+      Tags:
+        - Key: Name
+          Value: !Sub "Effulgence-PrivateSubnet1-${Environment}"
+
+  EffulgencePrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref EffulgenceVPC
+      CidrBlock: !Ref PrivateSubnet2Cidr
+      AvailabilityZone: #!Select [1, !GetAZs !Ref "AWS::Region"]
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: !Ref "AWS::Region"
+      Tags:
+        - Key: Name
+          Value: !Sub "Effulgence-PrivateSubnet2-${Environment}"
+
+  EffulgencePrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref EffulgencePrivateSubnet1
+      RouteTableId: !Ref EffulgencePrivateRouteTable
+
+  EffulgencePrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref EffulgencePrivateSubnet2
+      RouteTableId: !Ref EffulgencePrivateRouteTable
+
+  EffulgenceWebServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security group for web servers"
+      VpcId: !Ref EffulgenceVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+        # CidrIp: "0.0.0.0/0"
+          SourceSecurityGroupId: !Ref EffulgenceALBSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: "0.0.0.0/0"
+        # - IpProtocol: "-1"  # "-1" means all protocols
+        #   FromPort: "0"
+        #   ToPort: "65535"
+        #   CidrIp: !Sub "sg-${EffulgenceWebServerSecurityGroup}"
+      Tags:
+        - Key: Name
+          Value: !Sub "Effulgence-WebServerSG-${Environment}"
+
+  EffulgenceAppServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security group for app servers"
+      VpcId: !Ref EffulgenceVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          SourceSecurityGroupId: !Ref EffulgenceWebServerSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "Effulgence-AppServerSG-${Environment}"
+
+  EffulgenceDatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security group for database"
+      VpcId: !Ref EffulgenceVPC
+      SecurityGroupIngress:
+        - IpProtocol: "-1"  # "-1" means all protocols
+          FromPort: "0"
+          ToPort: "65535"
+        # - IpProtocol: tcp
+        #   FromPort: 3306
+        #   ToPort: 3306
+          SourceSecurityGroupId: !Ref EffulgenceAppServerSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "Effulgence-DatabaseSG-${Environment}"
+
+  EffulgenceALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security group for database"
+      VpcId: !Ref EffulgenceVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: "0.0.0.0/0"
+        - IpProtocol: "-1"  # "-1" means all protocols
+          FromPort: "0"
+          ToPort: "65535"
+          SourceSecurityGroupId: !Ref EffulgenceWebServerSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "Effulgence-ALBSG-${Environment}"
+Outputs:
+  VPCId:
+    Value: !Ref EffulgenceVPC
+    Export:
+      Name: !Sub "${AWS::StackName}-VPCId"
+  PublicSubnet1Id:
+    Value: !Ref EffulgencePublicSubnet1
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicSubnet1Id"
+  PublicSubnet2Id:
+    Value: !Ref EffulgencePublicSubnet2
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicSubnet2Id"
+  PrivateSubnet1Id:
+    Value: !Ref EffulgencePrivateSubnet1
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateSubnet1Id"
+  PrivateSubnet2Id:
+    Value: !Ref EffulgencePrivateSubnet2
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateSubnet2Id"
+  WebServerSecurityGroupId:
+    Value: !Ref EffulgenceWebServerSecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-WebServerSGId"
+  AppServerSecurityGroupId:
+    Value: !Ref EffulgenceAppServerSecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-AppServerSGId"
+  DatabaseSecurityGroupId:
+    Value: !Ref EffulgenceDatabaseSecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-DatabaseSGId"
+  ALBSecurityGroup: 
+    Value: !Ref EffulgenceALBSecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-ALBSGId"

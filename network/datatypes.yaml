@@ -1,0 +1,52 @@
+IpProtocol:
+FromPort:
+ToPort:
+CidrIp:
+
+# strings 
+name: Wokia kumase 
+city: "Ingersoll" 
+state: 'Ontario'
+country: Canada
+
+# integers
+age: 25
+year: 2000
+hex_number: 0x12ef
+
+# floats (decimal numbers)
+pi: 3.14159
+price: 9.99
+temperature: -10.5
+
+# boolean (True or False)
+is_student: true
+is_adult: false
+is_prod: true 
+
+# null (empty or no value)
+no_value: null
+address: null 
+
+# list (ordered collection of items)
+fruits:
+  - apple
+  - orange
+  - banana
+  - mango
+Names: ['John', 'Doe', 'Jane', 'Smith']  
+
+# dictionary (unordered collection of key-value pairs) 
+person:
+  name: John Doe
+  age: 25
+  city: Toronto
+  is_student: true
+  address: null
+
+# multiline string
+  description: |
+    John is a student at the University of Toronto.
+    He is studying Computer Science and enjoys coding.
+
+

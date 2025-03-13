@@ -1,0 +1,147 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: AWS CloudFormation Template for creating a VPC with 2 subnets
+  (public & private)
+Parameters:
+  VpcCIDR:
+    Description: CIDR block for the VPC
+    Type: String
+    Default: 10.0.0.0/16
+  PublicSubnetCIDR:
+    Description: CIDR block for the public subnet
+    Type: String
+    Default: 10.0.1.0/24
+  PrivateSubnetCIDR:
+    Description: CIDR block for the private subnet
+    Type: String
+    Default: 10.0.2.0/24
+  AvailabilityZone:
+    Description: Availability Zone for subnets
+    Type: AWS::EC2::AvailabilityZone::Name
+    Default: us-east-1a
+  VpcName:
+    Description: Name tag for the VPC
+    Type: String
+    Default: EffulgencetechVPC
+  StackTag:
+    Description: Stack tag for resources
+    Type: String
+    Default: production
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: VpcName
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: VpcName
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnetCIDR
+      AvailabilityZone: !Ref AvailabilityZone
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${!Ref StackTag}-PublicSubnet"
+ 
+        - Key: stack
+          Value: StackTag
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnetCIDR
+      AvailabilityZone: !Ref AvailabilityZone
+      Tags:
+        - Key: Name
+          Value: !Sub "${!Ref StackTag}-PrivateSubnet"
+   
+        - Key: stack
+          Value: StackTag
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${!Ref StackTag}-PublicRouteTable"
+ 
+        - Key: stack
+          Value: StackTag
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: stack
+          Value: StackTag
+  PrivateSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet
+      RouteTableId: !Ref PrivateRouteTable
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for EC2 instances
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${!Ref StackTag}-SecurityGroup"
+ 
+           
+Outputs:
+  VPCID:
+    Value: !Ref VPC
+    Description: "VPC ID"
+    Export:
+      Name: !Sub ${AWS::StackName}-VPC
+  PublicSubnetID:
+    Value: !Ref PublicSubnet
+    Description: "Public Subnet ID"
+    Export:
+      Name: !Sub ${AWS::StackName}-PublicSubnet
+  PrivateSubnetID:
+    Value: !Ref PrivateSubnet
+    Description: "Private Subnet ID"
+    Export:
+      Name: !Sub ${AWS::StackName}-PrivateSubnet
+  SecurityGroupID:
+    Value: !Ref SecurityGroup
+    Description: "Security Group ID"
+    Export:
+      Name: !Sub ${AWS::StackName}-SecurityGroup
